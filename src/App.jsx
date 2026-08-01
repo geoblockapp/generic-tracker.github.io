@@ -37,6 +37,27 @@ function buildPieGradient(items) {
   return `conic-gradient(${stops})`
 }
 
+function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180
+  return {
+    x: centerX + radius * Math.cos(angleInRadians),
+    y: centerY + radius * Math.sin(angleInRadians),
+  }
+}
+
+function describeSlicePath(index, count, radius = 110) {
+  const cx = 130
+  const cy = 130
+  const startAngle = (360 / count) * index
+  const endAngle = (360 / count) * (index + 1)
+
+  const start = polarToCartesian(cx, cy, radius, endAngle)
+  const end = polarToCartesian(cx, cy, radius, startAngle)
+  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1'
+
+  return [`M ${cx} ${cy}`, `L ${start.x} ${start.y}`, `A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`, 'Z'].join(' ')
+}
+
 export default function App() {
   const [items, setItems] = useState(() => readStoredItems())
   const [showCreateScreen, setShowCreateScreen] = useState(false)
@@ -69,6 +90,8 @@ export default function App() {
   )
 
   const pieGradient = useMemo(() => buildPieGradient(items), [items])
+  const sliceCount = Math.max(items.length, 1)
+  const sliceAngle = 360 / sliceCount
 
   const visibleEntries = useMemo(() => {
     if (!activeTracker) return []
@@ -278,18 +301,46 @@ export default function App() {
             onPointerUp={handleDialPointerUp}
             onPointerLeave={handleDialPointerUp}
           >
-            {items.map((item, index) => (
-              <div
-                class={`dial-option ${hoveredIndex === index ? 'active' : ''}`}
-                key={item.id}
-                style={{
-                  '--angle': `${(360 / Math.max(items.length, 1)) * index}deg`,
-                  '--slice-color': item.color,
-                }}
-              >
-                {item.name}
-              </div>
-            ))}
+            <svg viewBox="0 0 260 260" class="dial-svg" aria-hidden="true">
+              <defs>
+                <filter id="dialShadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(15, 23, 42, 0.24)" />
+                </filter>
+              </defs>
+
+              <circle cx="130" cy="130" r="110" fill="#dbeafe" opacity="0.55" />
+
+              {items.map((item, index) => {
+                const midAngle = (sliceAngle * index) + (sliceAngle / 2)
+                const labelPoint = polarToCartesian(130, 130, 64, midAngle)
+                return (
+                  <g
+                    class={`dial-slice ${hoveredIndex === index ? 'active' : ''}`}
+                    key={item.id}
+                    transform-origin="130px 130px"
+                  >
+                    <path
+                      d={describeSlicePath(index, sliceCount)}
+                      fill={item.color}
+                      stroke="rgba(255,255,255,0.65)"
+                      stroke-width="2"
+                      filter="url(#dialShadow)"
+                    />
+                    <text
+                      x={labelPoint.x}
+                      y={labelPoint.y}
+                      text-anchor="middle"
+                      dominant-baseline="middle"
+                      fill="white"
+                      font-size="11"
+                      font-weight="700"
+                    >
+                      {item.name}
+                    </text>
+                  </g>
+                )
+              })}
+            </svg>
 
             <button
               class="dial-center"
