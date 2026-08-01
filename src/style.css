@@ -5,6 +5,10 @@
   color: #0f172a;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -14,14 +18,14 @@ body {
 }
 
 .app-shell {
-  width: min(100%, 560px);
+  width: min(100%, 680px);
   padding: 24px;
 }
 
 .card {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.92);
   border-radius: 24px;
-  padding: 32px;
+  padding: 28px;
   box-shadow: 0 24px 80px rgba(15, 23, 42, 0.14);
 }
 
@@ -39,18 +43,124 @@ h1 {
   font-size: clamp(2rem, 4vw, 3rem);
 }
 
+h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .subtitle {
-  margin: 16px 0 24px;
+  margin: 16px 0 20px;
   line-height: 1.6;
   color: #475569;
 }
 
-.primary {
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stats-row > div {
+  background: #eff6ff;
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+
+.stat-label {
+  display: block;
+  color: #64748b;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.tracker-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.tracker-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: white;
+}
+
+.primary,
+.ghost,
+.danger {
   border: none;
-  padding: 12px 18px;
   border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.primary {
   background: #2563eb;
   color: white;
+}
+
+.ghost {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.item-list {
+  display: grid;
+  gap: 10px;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+
+.item-name {
   font-weight: 700;
-  cursor: pointer;
+}
+
+.item-meta {
+  color: #64748b;
+  font-size: 0.9rem;
+  margin-top: 2px;
+}
+
+.empty-state {
+  color: #64748b;
+  margin: 0;
 }
