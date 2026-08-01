@@ -49,9 +49,9 @@ export default function App() {
   const [entryQuantity, setEntryQuantity] = useState(1)
   const [entryNote, setEntryNote] = useState('')
   const [historyRange, setHistoryRange] = useState('1w')
-  const [rotation, setRotation] = useState(0)
   const [dragging, setDragging] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [hoveredIndex, setHoveredIndex] = useState(null)
   const dialRef = useRef(null)
 
   useEffect(() => {
@@ -195,7 +195,6 @@ export default function App() {
 
   function clearAll() {
     setItems([])
-    setRotation(0)
     setShowTrackerScreen(false)
     setActiveTrackerId(null)
   }
@@ -211,26 +210,30 @@ export default function App() {
     return (Math.atan2(y, x) * 180) / Math.PI + 90
   }
 
+  function getSliceIndexFromAngle(angle) {
+    const segmentCount = Math.max(items.length, 1)
+    const segmentAngle = 360 / segmentCount
+    const normalizedAngle = (angle + 360) % 360
+    return Math.floor(normalizedAngle / segmentAngle) % segmentCount
+  }
+
   function handleDialPointerDown(event) {
     if (event.target.closest('.dial-center')) return
     setExpanded(true)
     setDragging(true)
+    setHoveredIndex(getSliceIndexFromAngle(getAngleFromEvent(event)))
     event.currentTarget.setPointerCapture(event.pointerId)
-    setRotation(getAngleFromEvent(event))
   }
 
   function handleDialPointerMove(event) {
     if (!dragging) return
-    setRotation(getAngleFromEvent(event))
+    setHoveredIndex(getSliceIndexFromAngle(getAngleFromEvent(event)))
   }
 
   function handleDialPointerUp(event) {
     if (!dragging) return
-    const segmentCount = Math.max(items.length, 1)
-    const segmentAngle = 360 / segmentCount
-    const pointerAngle = getAngleFromEvent(event)
-    const normalizedAngle = (pointerAngle + 360) % 360
-    const selectedIndex = Math.round(normalizedAngle / segmentAngle) % segmentCount
+
+    const selectedIndex = hoveredIndex ?? getSliceIndexFromAngle(getAngleFromEvent(event))
     const selectedItem = items[selectedIndex]
 
     if (selectedItem) {
@@ -240,7 +243,7 @@ export default function App() {
 
     setDragging(false)
     setExpanded(false)
-    setRotation(0)
+    setHoveredIndex(null)
   }
 
   return (
@@ -269,7 +272,6 @@ export default function App() {
             class={`dial ${expanded ? 'expanded' : ''} ${dragging ? 'dragging' : ''}`}
             style={{
               '--pie-gradient': pieGradient,
-              '--rotation': `${rotation}deg`,
             }}
             onPointerDown={handleDialPointerDown}
             onPointerMove={handleDialPointerMove}
@@ -277,9 +279,8 @@ export default function App() {
             onPointerLeave={handleDialPointerUp}
           >
             {items.map((item, index) => (
-              <button
-                class="dial-option"
-                type="button"
+              <div
+                class={`dial-option ${hoveredIndex === index ? 'active' : ''}`}
                 key={item.id}
                 style={{
                   '--angle': `${(360 / Math.max(items.length, 1)) * index}deg`,
@@ -287,7 +288,7 @@ export default function App() {
                 }}
               >
                 {item.name}
-              </button>
+              </div>
             ))}
 
             <button
