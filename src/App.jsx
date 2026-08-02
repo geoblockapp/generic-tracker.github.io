@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 
 const STORAGE_KEY = 'generic-tracker-items'
+const THEME_KEY = 'generic-tracker-theme'
 const TRACKER_COLORS = ['#2563eb', '#8b5cf6', '#0f766e', '#ea580c', '#db2777', '#0891b2']
 const TRACKER_UNITS = ['entries', 'boxes', 'bottles', 'meals', 'sessions', 'hours']
 const TRACKER_TYPES = ['checkbox', 'notes', 'numeric']
@@ -62,6 +63,13 @@ export default function App() {
   const [items, setItems] = useState(() => readStoredItems())
   const [showCreateScreen, setShowCreateScreen] = useState(false)
   const [showTrackerScreen, setShowTrackerScreen] = useState(false)
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem(THEME_KEY) || 'light'
+    } catch {
+      return 'light'
+    }
+  })
   const [activeTrackerId, setActiveTrackerId] = useState(null)
   const [trackerName, setTrackerName] = useState('')
   const [trackerNameError, setTrackerNameError] = useState('')
@@ -78,6 +86,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
   }, [items])
+
+  useEffect(() => {
+    document.body.dataset.theme = theme
+    localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
 
   const totalCount = useMemo(
     () => items.reduce((sum, item) => sum + Number(item.count || 0), 0),
@@ -271,6 +284,16 @@ export default function App() {
 
   return (
     <main class="app-shell">
+      <div class="top-theme-row">
+        <button
+          class="theme-toggle"
+          type="button"
+          onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
+        >
+          {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
+        </button>
+      </div>
+
       <section class="card">
         <p class="eyebrow">Local-first tracker</p>
         <h1>Generic Tracker</h1>
