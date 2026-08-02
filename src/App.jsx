@@ -1,417 +1,58 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-
-const STORAGE_KEY = 'generic-tracker-items'
-const THEME_KEY = 'generic-tracker-theme'
-const TRACKER_COLORS = ['#2563eb', '#8b5cf6', '#0f766e', '#ea580c', '#db2777', '#0891b2']
-const TRACKER_UNITS = ['entries', 'boxes', 'bottles', 'meals', 'sessions', 'hours']
-const TRACKER_TYPES = ['checkbox', 'notes', 'numeric']
-const HISTORY_RANGES = [
-  { label: '1D', value: '1d' },
-  { label: '1W', value: '1w' },
-  { label: '1M', value: '1m' },
-  { label: '1Y', value: '1y' },
-]
-
-function readStoredItems() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch {
-    return []
-  }
-}
-
-function buildPieGradient(items) {
-  if (items.length === 0) {
-    return 'radial-gradient(circle at center, #ffffff 0 48%, #dbeafe 49% 100%)'
-  }
-
-  const step = 360 / items.length
-  const stops = items
-    .map((item, index) => {
-      const start = step * index
-      const end = step * (index + 1)
-      return `${item.color || '#2563eb'} ${start}deg ${end}deg`
-    })
-    .join(', ')
-
-  return `conic-gradient(${stops})`
-}
-
-function IconDownload() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  )
-}
-
-function IconUpload() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
-  )
-}
-
-function IconTrash() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-      <path d="M10 11v6" />
-      <path d="M14 11v6" />
-      <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-    </svg>
-  )
-}
-
-function IconX() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
-  )
-}
-
-function IconClose() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-
-function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
-  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180
-  return {
-    x: centerX + radius * Math.cos(angleInRadians),
-    y: centerY + radius * Math.sin(angleInRadians),
-  }
-}
-
-function describeSlicePath(index, count, radius = 110) {
-  const cx = 130
-  const cy = 130
-  const startAngle = (360 / count) * index
-  const endAngle = (360 / count) * (index + 1)
-
-  const start = polarToCartesian(cx, cy, radius, endAngle)
-  const end = polarToCartesian(cx, cy, radius, startAngle)
-  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1'
-
-  return [`M ${cx} ${cy}`, `L ${start.x} ${start.y}`, `A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`, 'Z'].join(' ')
-}
+import { useState } from 'preact/hooks'
+import useTrackers from './hooks/useTrackers'
+import useTheme from './hooks/useTheme'
+import ThemeSwitch from './components/ThemeSwitch'
+import Dial from './components/Dial'
+import ItemList from './components/ItemList'
+import CreateTrackerDialog from './components/CreateTrackerDialog'
+import TrackerDetailDialog from './components/TrackerDetailDialog'
+import { IconDownload, IconUpload, IconTrash } from './icons'
 
 export default function App() {
-  const [items, setItems] = useState(() => readStoredItems())
+  const trackers = useTrackers()
+  const [theme, toggleTheme] = useTheme()
   const [showCreateScreen, setShowCreateScreen] = useState(false)
   const [showTrackerScreen, setShowTrackerScreen] = useState(false)
-  const [theme, setTheme] = useState(() => {
-    try {
-      return localStorage.getItem(THEME_KEY) || 'light'
-    } catch {
-      return 'light'
-    }
-  })
   const [activeTrackerId, setActiveTrackerId] = useState(null)
-  const [trackerName, setTrackerName] = useState('')
-  const [trackerNameError, setTrackerNameError] = useState('')
-  const [trackerUnit, setTrackerUnit] = useState(TRACKER_UNITS[0])
-  const [trackerType, setTrackerType] = useState(TRACKER_TYPES[0])
-  const [entryQuantity, setEntryQuantity] = useState(1)
-  const [entryNote, setEntryNote] = useState('')
-  const [entryNoteError, setEntryNoteError] = useState('')
-  const [historyRange, setHistoryRange] = useState('1w')
-  const [dragging, setDragging] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-  const [hoveredIndex, setHoveredIndex] = useState(null)
-  const dialRef = useRef(null)
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  }, [items])
-
-  useEffect(() => {
-    document.body.dataset.theme = theme
-    localStorage.setItem(THEME_KEY, theme)
-  }, [theme])
-
-  const totalCount = useMemo(
-    () => items.reduce((sum, item) => sum + Number(item.count || 0), 0),
-    [items],
-  )
-
-  const activeTracker = useMemo(
-    () => items.find((item) => item.id === activeTrackerId) || null,
-    [items, activeTrackerId],
-  )
-
-  const pieGradient = useMemo(() => buildPieGradient(items), [items])
-  const sliceCount = Math.max(items.length, 1)
-  const sliceAngle = 360 / sliceCount
-
-  const visibleEntries = useMemo(() => {
-    if (!activeTracker) return []
-
-    const now = Date.now()
-    const cutoffMap = {
-      '1d': 24 * 60 * 60 * 1000,
-      '1w': 7 * 24 * 60 * 60 * 1000,
-      '1m': 30 * 24 * 60 * 60 * 1000,
-      '1y': 365 * 24 * 60 * 60 * 1000,
-    }
-
-    const cutoff = cutoffMap[historyRange] || cutoffMap['1w']
-    return (activeTracker.entries || []).filter((entry) => {
-      const createdAt = new Date(entry.createdAt).getTime()
-      return Number.isFinite(createdAt) && now - createdAt <= cutoff
-    })
-  }, [activeTracker, historyRange])
-
-  const rangeTotal = useMemo(
-    () => visibleEntries.reduce((sum, entry) => sum + Number(entry.quantity || 0), 0),
-    [visibleEntries],
-  )
-
-  const rangeAverage = useMemo(
-    () => (visibleEntries.length ? rangeTotal / visibleEntries.length : 0),
-    [visibleEntries, rangeTotal],
-  )
-
-  function createTracker(event) {
-    if (event?.preventDefault) {
-      event.preventDefault()
-    }
-
-    const name = trackerName.trim()
-    if (!name) {
-      setTrackerNameError('Tracker name is required')
-      return
-    }
-
-    setTrackerNameError('')
-
-    const newTracker = {
-      id: crypto.randomUUID(),
-      name,
-      type: trackerType,
-      unit: trackerUnit.trim() || TRACKER_UNITS[0],
-      count: 0,
-      color: TRACKER_COLORS[items.length % TRACKER_COLORS.length],
-      createdAt: new Date().toISOString(),
-      entries: [],
-    }
-
-    setItems((current) => [newTracker, ...current])
-    setTrackerName('')
-    setTrackerUnit(TRACKER_UNITS[0])
-    setTrackerType(TRACKER_TYPES[0])
-    setShowCreateScreen(false)
-  }
-
-  function addEntry(event) {
-    event.preventDefault()
-    if (!activeTrackerId) return
-
-    const tracker = items.find((item) => item.id === activeTrackerId)
-    if (!tracker) return
-
-    const note = entryNote.trim()
-    const quantity = Number(entryQuantity) || 1
-
-    if ((tracker.type === 'notes' || tracker.type === 'checkbox') && !note) {
-      setEntryNoteError('Enter some text before adding this item')
-      return
-    }
-
-    setEntryNoteError('')
-
-    const entry = {
-      id: crypto.randomUUID(),
-      quantity: tracker.type === 'numeric' ? quantity : 1,
-      note,
-      createdAt: new Date().toISOString(),
-      completed: false,
-      type: tracker.type,
-    }
-
-    setItems((current) =>
-      current.map((item) => {
-        if (item.id !== activeTrackerId) return item
-
-        return {
-          ...item,
-          count: tracker.type === 'numeric'
-            ? Number(item.count || 0) + quantity
-            : Number(item.count || 0) + (entry.completed ? 0 : 1),
-          entries: [entry, ...(item.entries || [])],
-        }
-      }),
-    )
-
-    setEntryQuantity(1)
-    setEntryNote('')
-  }
-
-  function toggleEntryCompletion(entryId) {
-    if (!activeTrackerId) return
-
-    setItems((current) =>
-      current.map((item) => {
-        if (item.id !== activeTrackerId) return item
-
-        return {
-          ...item,
-          entries: (item.entries || []).map((entry) =>
-            entry.id === entryId ? { ...entry, completed: !entry.completed } : entry,
-          ),
-        }
-      }),
-    )
-  }
+  const activeTracker = trackers.items.find((item) => item.id === activeTrackerId) || null
+  const totalCount = trackers.items.reduce((sum, item) => sum + Number(item.count || 0), 0)
 
   function openTracker(id) {
     setActiveTrackerId(id)
     setShowTrackerScreen(true)
   }
 
-  function removeItem(id) {
-    setItems((current) => current.filter((item) => item.id !== id))
+  function handleRemove(id) {
+    trackers.removeItem(id)
     if (activeTrackerId === id) {
       setShowTrackerScreen(false)
       setActiveTrackerId(null)
     }
   }
 
-  function clearAll() {
-    setItems([])
+  function handleClearAll() {
+    trackers.clearAll()
     setShowTrackerScreen(false)
     setActiveTrackerId(null)
   }
 
-  function exportData() {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      items,
-    }
-
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: 'application/json',
-    })
-
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'generic-tracker-export.json'
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
-
-  function importData(event) {
+  async function handleImportChange(event) {
     const file = event.target.files?.[0]
+    event.target.value = ''
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result || '{}'))
-        const importedItems = Array.isArray(parsed.items) ? parsed.items : []
-        if (importedItems.length === 0) {
-          return
-        }
-
-        setItems(importedItems)
-        setShowTrackerScreen(false)
-        setActiveTrackerId(null)
-      } catch {
-        return
-      }
+    const success = await trackers.importData(file)
+    if (success) {
+      setShowTrackerScreen(false)
+      setActiveTrackerId(null)
     }
-
-    reader.readAsText(file)
-    event.target.value = ''
-  }
-
-  function scrollFieldIntoView(event) {
-    const field = event.currentTarget
-    window.setTimeout(() => {
-      field.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    }, 150)
-  }
-
-  function getAngleFromEvent(event) {
-    const dial = dialRef.current
-    if (!dial) return 0
-    const rect = dial.getBoundingClientRect()
-    const centerX = rect.left + rect.width / 2
-    const centerY = rect.top + rect.height / 2
-    const x = event.clientX - centerX
-    const y = event.clientY - centerY
-    return (Math.atan2(y, x) * 180) / Math.PI + 90
-  }
-
-  function getSliceIndexFromAngle(angle) {
-    const segmentCount = Math.max(items.length, 1)
-    const segmentAngle = 360 / segmentCount
-    const normalizedAngle = (angle + 360) % 360
-    return Math.floor(normalizedAngle / segmentAngle) % segmentCount
-  }
-
-  function handleDialPointerDown(event) {
-    if (event.target.closest('.dial-center')) return
-    setExpanded(true)
-    setDragging(true)
-    setHoveredIndex(getSliceIndexFromAngle(getAngleFromEvent(event)))
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-
-  function handleDialPointerMove(event) {
-    if (!dragging) return
-    setHoveredIndex(getSliceIndexFromAngle(getAngleFromEvent(event)))
-  }
-
-  function handleDialPointerUp(event) {
-    if (!dragging) return
-
-    const selectedIndex = hoveredIndex ?? getSliceIndexFromAngle(getAngleFromEvent(event))
-    const selectedItem = items[selectedIndex]
-
-    if (selectedItem) {
-      setActiveTrackerId(selectedItem.id)
-      setShowTrackerScreen(true)
-    }
-
-    setDragging(false)
-    setExpanded(false)
-    setHoveredIndex(null)
   }
 
   return (
     <main class="app-shell">
       <div class="top-theme-row">
-        <button
-          class="theme-switch"
-          type="button"
-          role="switch"
-          aria-checked={theme === 'dark'}
-          aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-          title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-          onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
-        >
-          <span class="theme-switch-icon sun" aria-hidden="true">☀️</span>
-          <span class="theme-switch-icon moon" aria-hidden="true">🌙</span>
-          <span class="theme-switch-thumb" aria-hidden="true">
-            {theme === 'light' ? '☀️' : '🌙'}
-          </span>
-        </button>
+        <ThemeSwitch theme={theme} onToggle={toggleTheme} />
       </div>
 
       <section class="card">
@@ -424,7 +65,7 @@ export default function App() {
         <div class="stats-row">
           <div>
             <span class="stat-label">Trackers</span>
-            <strong>{items.length}</strong>
+            <strong>{trackers.items.length}</strong>
           </div>
           <div>
             <span class="stat-label">Total</span>
@@ -432,68 +73,7 @@ export default function App() {
           </div>
         </div>
 
-        <div class="dial-wrap">
-          <div
-            ref={dialRef}
-            class={`dial ${expanded ? 'expanded' : ''} ${dragging ? 'dragging' : ''}`}
-            style={{
-              '--pie-gradient': pieGradient,
-            }}
-            onPointerDown={handleDialPointerDown}
-            onPointerMove={handleDialPointerMove}
-            onPointerUp={handleDialPointerUp}
-            onPointerLeave={handleDialPointerUp}
-          >
-            <svg viewBox="0 0 260 260" class="dial-svg" aria-hidden="true">
-              <defs>
-                <filter id="dialShadow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(15, 23, 42, 0.24)" />
-                </filter>
-              </defs>
-
-              <circle cx="130" cy="130" r="110" fill="#dbeafe" opacity="0.55" />
-
-              {items.map((item, index) => {
-                const midAngle = (sliceAngle * index) + (sliceAngle / 2)
-                const labelPoint = polarToCartesian(130, 130, 64, midAngle)
-                return (
-                  <g
-                    class={`dial-slice ${hoveredIndex === index ? 'active' : ''}`}
-                    key={item.id}
-                    transform-origin="130px 130px"
-                  >
-                    <path
-                      d={describeSlicePath(index, sliceCount)}
-                      fill={item.color}
-                      stroke="rgba(255,255,255,0.65)"
-                      stroke-width="2"
-                      filter="url(#dialShadow)"
-                    />
-                    <text
-                      x={labelPoint.x}
-                      y={labelPoint.y}
-                      text-anchor="middle"
-                      dominant-baseline="middle"
-                      fill="white"
-                      font-size="11"
-                      font-weight="700"
-                    >
-                      {item.name}
-                    </text>
-                  </g>
-                )
-              })}
-            </svg>
-
-            <button
-              class="dial-center"
-              type="button"
-              onClick={() => setShowCreateScreen(true)}
-            >
-              +
-            </button>
-          </div>
-        </div>
+        <Dial items={trackers.items} onSelectTracker={openTracker} onCreateNew={() => setShowCreateScreen(true)} />
 
         <div class="list-header">
           <h2>Tracked items</h2>
@@ -501,20 +81,20 @@ export default function App() {
             <button
               class="ghost icon-btn"
               type="button"
-              onClick={exportData}
+              onClick={trackers.exportData}
               title="Export data"
               aria-label="Export data"
             >
               <IconDownload />
             </button>
             <label class="ghost icon-btn import-label" title="Import data" aria-label="Import data">
-              <input type="file" accept="application/json" onChange={importData} />
+              <input type="file" accept="application/json" onChange={handleImportChange} />
               <IconUpload />
             </label>
             <button
               class="ghost icon-btn"
               type="button"
-              onClick={clearAll}
+              onClick={handleClearAll}
               title="Clear all trackers"
               aria-label="Clear all trackers"
             >
@@ -523,281 +103,26 @@ export default function App() {
           </div>
         </div>
 
-        <div class="item-list">
-          {items.length === 0 ? (
-            <p class="empty-state">No tracked items yet. Tap the center plus to create one.</p>
-          ) : (
-            items.map((item) => (
-              <article
-                class="item-row"
-                key={item.id}
-                role="button"
-                tabIndex={0}
-                title={`Open ${item.name}`}
-                onClick={() => openTracker(item.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    openTracker(item.id)
-                  }
-                }}
-              >
-                <div>
-                  <div class="item-name">{item.name}</div>
-                  <div class="item-meta">
-                    {item.count} {item.unit}
-                  </div>
-                </div>
-                <div class="row-actions">
-                  <button
-                    class="danger icon-btn"
-                    type="button"
-                    title={`Remove ${item.name}`}
-                    aria-label={`Remove ${item.name}`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      removeItem(item.id)
-                    }}
-                  >
-                    <IconX />
-                  </button>
-                </div>
-              </article>
-            ))
-          )}
-        </div>
+        <ItemList items={trackers.items} onOpen={openTracker} onRemove={handleRemove} />
       </section>
 
       {showCreateScreen && (
-        <div
-          class="overlay-screen"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setShowCreateScreen(false)
-            }
+        <CreateTrackerDialog
+          onClose={() => setShowCreateScreen(false)}
+          onCreate={(fields) => {
+            trackers.addTracker(fields)
+            setShowCreateScreen(false)
           }}
-        >
-          <div class="overlay-card">
-            <div class="overlay-header">
-              <h2>Add tracker</h2>
-              <button
-                class="ghost icon-btn"
-                type="button"
-                title="Close"
-                aria-label="Close"
-                onClick={() => setShowCreateScreen(false)}
-              >
-                <IconClose />
-              </button>
-            </div>
-
-            <form class="create-form" onSubmit={createTracker}>
-              <label>
-                <span>Tracker name</span>
-                <input
-                  value={trackerName}
-                  aria-invalid={Boolean(trackerNameError)}
-                  class={trackerNameError ? 'invalid' : ''}
-                  onInput={(event) => {
-                    setTrackerName(event.currentTarget.value)
-                    if (trackerNameError) {
-                      setTrackerNameError('')
-                    }
-                  }}
-                  onFocus={scrollFieldIntoView}
-                  placeholder="What do you want to track?"
-                />
-                {trackerNameError && <span class="field-error">{trackerNameError}</span>}
-              </label>
-
-              <label>
-                <span>Type</span>
-                <select
-                  value={trackerType}
-                  onChange={(event) => setTrackerType(event.currentTarget.value)}
-                >
-                  {TRACKER_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                <span>Unit</span>
-                <select
-                  value={trackerUnit}
-                  onChange={(event) => setTrackerUnit(event.currentTarget.value)}
-                >
-                  {TRACKER_UNITS.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div class="form-actions">
-                <button class="primary" type="button" onClick={createTracker}>
-                  Create tracker
-                </button>
-                <button class="ghost" type="button" onClick={() => setShowCreateScreen(false)}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        />
       )}
 
       {showTrackerScreen && activeTracker && (
-        <div
-          class="overlay-screen tracker-details-screen"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setShowTrackerScreen(false)
-              setEntryNoteError('')
-            }
-          }}
-        >
-          <div class="overlay-card tracker-card">
-            <div class="overlay-header">
-              <h2>{activeTracker.name}</h2>
-              <button
-                class="ghost icon-btn"
-                type="button"
-                title="Close"
-                aria-label="Close"
-                onClick={() => {
-                  setShowTrackerScreen(false)
-                  setEntryNoteError('')
-                }}
-              >
-                <IconClose />
-              </button>
-            </div>
-
-            <div class="tracker-summary">
-              <div>
-                <span class="stat-label">Current total</span>
-                <strong>{activeTracker.count}</strong>
-              </div>
-              <div>
-                <span class="stat-label">Type</span>
-                <strong>{activeTracker.type}</strong>
-              </div>
-              {activeTracker.type === 'numeric' && (
-                <>
-                  <div>
-                    <span class="stat-label">Selected total</span>
-                    <strong>{rangeTotal}</strong>
-                  </div>
-                  <div>
-                    <span class="stat-label">Selected average</span>
-                    <strong>{rangeAverage.toFixed(1)}</strong>
-                  </div>
-                </>
-              )}
-              <div>
-                <span class="stat-label">Unit</span>
-                <strong>{activeTracker.unit}</strong>
-              </div>
-            </div>
-
-            <form class="create-form" onSubmit={addEntry}>
-              {activeTracker.type === 'numeric' && (
-                <label>
-                  <span>Quantity</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={entryQuantity}
-                    onInput={(event) => setEntryQuantity(event.currentTarget.value)}
-                    onFocus={scrollFieldIntoView}
-                  />
-                </label>
-              )}
-
-              <label>
-                <span>
-                  {activeTracker.type === 'notes' || activeTracker.type === 'checkbox' ? 'Note' : 'Entry note'}
-                </span>
-                <input
-                  value={entryNote}
-                  aria-invalid={Boolean(entryNoteError)}
-                  class={entryNoteError ? 'invalid' : ''}
-                  onInput={(event) => {
-                    setEntryNote(event.currentTarget.value)
-                    if (entryNoteError) {
-                      setEntryNoteError('')
-                    }
-                  }}
-                  onFocus={scrollFieldIntoView}
-                  placeholder={
-                    activeTracker.type === 'numeric' ? 'Optional entry note' : 'What did you check off?'
-                  }
-                />
-                {entryNoteError && <span class="field-error">{entryNoteError}</span>}
-              </label>
-
-              <div class="form-actions">
-                <button class="primary" type="submit">Add entry</button>
-              </div>
-            </form>
-
-            <div class="history-range-bar">
-              {HISTORY_RANGES.map((range) => (
-                <button
-                  key={range.value}
-                  class={`history-range-btn ${historyRange === range.value ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setHistoryRange(range.value)}
-                >
-                  {range.label}
-                </button>
-              ))}
-            </div>
-
-            <div class="history-tree">
-              {visibleEntries.length === 0 ? (
-                <p class="empty-state">No entries in the selected time window.</p>
-              ) : (
-                visibleEntries.map((entry, index) => (
-                  <div class="history-node" key={entry.id}>
-                    <div class="history-line"></div>
-                    <div class="history-dot"></div>
-                    <div class={`history-card ${entry.completed ? 'completed' : ''}`}>
-                      <div class="history-head">
-                        <span>Entry {index + 1}</span>
-                        <span>{new Date(entry.createdAt).toLocaleString()}</span>
-                      </div>
-                      <div class="history-body">
-                        {activeTracker.type === 'checkbox' ? (
-                          <label class="history-checkbox-row">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(entry.completed)}
-                              onChange={() => toggleEntryCompletion(entry.id)}
-                            />
-                            <span>{entry.note || 'Checked item'}</span>
-                          </label>
-                        ) : activeTracker.type === 'notes' ? (
-                          <span>{entry.note || 'Note entry'}</span>
-                        ) : (
-                          <span>
-                            +{entry.quantity} {activeTracker.unit}
-                            {entry.note ? ` • ${entry.note}` : ''}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+        <TrackerDetailDialog
+          tracker={activeTracker}
+          onClose={() => setShowTrackerScreen(false)}
+          onAddEntry={(fields) => trackers.addEntry(activeTracker.id, fields)}
+          onToggleEntryCompletion={(entryId) => trackers.toggleEntryCompletion(activeTracker.id, entryId)}
+        />
       )}
     </main>
   )
