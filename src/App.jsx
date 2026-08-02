@@ -77,6 +77,7 @@ export default function App() {
   const [trackerType, setTrackerType] = useState(TRACKER_TYPES[0])
   const [entryQuantity, setEntryQuantity] = useState(1)
   const [entryNote, setEntryNote] = useState('')
+  const [entryNoteError, setEntryNoteError] = useState('')
   const [historyRange, setHistoryRange] = useState('1w')
   const [dragging, setDragging] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -175,7 +176,12 @@ export default function App() {
     const note = entryNote.trim()
     const quantity = Number(entryQuantity) || 1
 
-    if (tracker.type === 'notes' && !note) return
+    if ((tracker.type === 'notes' || tracker.type === 'checkbox') && !note) {
+      setEntryNoteError('Enter some text before adding this item')
+      return
+    }
+
+    setEntryNoteError('')
 
     const entry = {
       id: crypto.randomUUID(),
@@ -233,6 +239,56 @@ export default function App() {
     setItems([])
     setShowTrackerScreen(false)
     setActiveTrackerId(null)
+  }
+
+  function exportData() {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      items,
+    }
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json',
+    })
+
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'generic-tracker-export.json'
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function importData(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result || '{}'))
+        const importedItems = Array.isArray(parsed.items) ? parsed.items : []
+        if (importedItems.length === 0) {
+          return
+        }
+
+        setItems(importedItems)
+        setShowTrackerScreen(false)
+        setActiveTrackerId(null)
+      } catch {
+        return
+      }
+    }
+
+    reader.readAsText(file)
+    event.target.value = ''
+  }
+
+  function scrollFieldIntoView(event) {
+    const field = event.currentTarget
+    window.setTimeout(() => {
+      field.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 150)
   }
 
   function getAngleFromEvent(event) {
@@ -377,9 +433,18 @@ export default function App() {
 
         <div class="list-header">
           <h2>Tracked items</h2>
-          <button class="ghost" type="button" onClick={clearAll}>
-            Clear all
-          </button>
+          <div class="row-actions">
+            <button class="ghost" type="button" onClick={exportData}>
+              Export
+            </button>
+            <label class="ghost import-label">
+              <input type="file" accept="application/json" onChange={importData} />
+              Import
+            </label>
+            <button class="ghost" type="button" onClick={clearAll}>
+              Clear all
+            </button>
+          </div>
         </div>
 
         <div class="item-list">
@@ -412,7 +477,14 @@ export default function App() {
       </section>
 
       {showCreateScreen && (
-        <div class="overlay-screen">
+        <div
+          class="overlay-screen"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowCreateScreen(false)
+            }
+          }}
+        >
           <div class="overlay-card">
             <div class="overlay-header">
               <h2>Add tracker</h2>
@@ -434,6 +506,7 @@ export default function App() {
                       setTrackerNameError('')
                     }
                   }}
+                  onFocus={scrollFieldIntoView}
                   placeholder="What do you want to track?"
                 />
                 {trackerNameError && <span class="field-error">{trackerNameError}</span>}
@@ -481,11 +554,26 @@ export default function App() {
       )}
 
       {showTrackerScreen && activeTracker && (
-        <div class="overlay-screen tracker-details-screen">
+        <div
+          class="overlay-screen tracker-details-screen"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowTrackerScreen(false)
+              setEntryNoteError('')
+            }
+          }}
+        >
           <div class="overlay-card tracker-card">
             <div class="overlay-header">
               <h2>{activeTracker.name}</h2>
-              <button class="ghost" type="button" onClick={() => setShowTrackerScreen(false)}>
+              <button
+                class="ghost"
+                type="button"
+                onClick={() => {
+                  setShowTrackerScreen(false)
+                  setEntryNoteError('')
+                }}
+              >
                 Close
               </button>
             </div>
@@ -526,17 +614,31 @@ export default function App() {
                     min="1"
                     value={entryQuantity}
                     onInput={(event) => setEntryQuantity(event.currentTarget.value)}
+                    onFocus={scrollFieldIntoView}
                   />
                 </label>
               )}
 
               <label>
-                <span>{activeTracker.type === 'notes' ? 'Note' : 'Entry note'}</span>
+                <span>
+                  {activeTracker.type === 'notes' || activeTracker.type === 'checkbox' ? 'Note' : 'Entry note'}
+                </span>
                 <input
                   value={entryNote}
-                  onInput={(event) => setEntryNote(event.currentTarget.value)}
-                  placeholder={activeTracker.type === 'notes' ? 'Add a note' : 'Optional entry note'}
+                  aria-invalid={Boolean(entryNoteError)}
+                  class={entryNoteError ? 'invalid' : ''}
+                  onInput={(event) => {
+                    setEntryNote(event.currentTarget.value)
+                    if (entryNoteError) {
+                      setEntryNoteError('')
+                    }
+                  }}
+                  onFocus={scrollFieldIntoView}
+                  placeholder={
+                    activeTracker.type === 'numeric' ? 'Optional entry note' : 'What did you check off?'
+                  }
                 />
+                {entryNoteError && <span class="field-error">{entryNoteError}</span>}
               </label>
 
               <div class="form-actions">
