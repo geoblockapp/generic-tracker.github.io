@@ -70,21 +70,21 @@ function IconTrash() {
   )
 }
 
-function IconEye() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  )
-}
-
 function IconX() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="10" />
       <line x1="15" y1="9" x2="9" y2="15" />
       <line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
+  )
+}
+
+function IconClose() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   )
 }
@@ -278,6 +278,11 @@ export default function App() {
     )
   }
 
+  function openTracker(id) {
+    setActiveTrackerId(id)
+    setShowTrackerScreen(true)
+  }
+
   function removeItem(id) {
     setItems((current) => current.filter((item) => item.id !== id))
     if (activeTrackerId === id) {
@@ -393,11 +398,19 @@ export default function App() {
     <main class="app-shell">
       <div class="top-theme-row">
         <button
-          class="theme-toggle"
+          class="theme-switch"
           type="button"
+          role="switch"
+          aria-checked={theme === 'dark'}
+          aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+          title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
           onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
         >
-          {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
+          <span class="theme-switch-icon sun" aria-hidden="true">☀️</span>
+          <span class="theme-switch-icon moon" aria-hidden="true">🌙</span>
+          <span class="theme-switch-thumb" aria-hidden="true">
+            {theme === 'light' ? '☀️' : '🌙'}
+          </span>
         </button>
       </div>
 
@@ -515,7 +528,20 @@ export default function App() {
             <p class="empty-state">No tracked items yet. Tap the center plus to create one.</p>
           ) : (
             items.map((item) => (
-              <article class="item-row" key={item.id}>
+              <article
+                class="item-row"
+                key={item.id}
+                role="button"
+                tabIndex={0}
+                title={`Open ${item.name}`}
+                onClick={() => openTracker(item.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    openTracker(item.id)
+                  }
+                }}
+              >
                 <div>
                   <div class="item-name">{item.name}</div>
                   <div class="item-meta">
@@ -524,23 +550,14 @@ export default function App() {
                 </div>
                 <div class="row-actions">
                   <button
-                    class="primary small icon-btn"
-                    type="button"
-                    title={`Open ${item.name}`}
-                    aria-label={`Open ${item.name}`}
-                    onClick={() => {
-                      setActiveTrackerId(item.id)
-                      setShowTrackerScreen(true)
-                    }}
-                  >
-                    <IconEye />
-                  </button>
-                  <button
                     class="danger icon-btn"
                     type="button"
                     title={`Remove ${item.name}`}
                     aria-label={`Remove ${item.name}`}
-                    onClick={() => removeItem(item.id)}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      removeItem(item.id)
+                    }}
                   >
                     <IconX />
                   </button>
@@ -563,8 +580,14 @@ export default function App() {
           <div class="overlay-card">
             <div class="overlay-header">
               <h2>Add tracker</h2>
-              <button class="ghost" type="button" onClick={() => setShowCreateScreen(false)}>
-                Close
+              <button
+                class="ghost icon-btn"
+                type="button"
+                title="Close"
+                aria-label="Close"
+                onClick={() => setShowCreateScreen(false)}
+              >
+                <IconClose />
               </button>
             </div>
 
@@ -642,14 +665,16 @@ export default function App() {
             <div class="overlay-header">
               <h2>{activeTracker.name}</h2>
               <button
-                class="ghost"
+                class="ghost icon-btn"
                 type="button"
+                title="Close"
+                aria-label="Close"
                 onClick={() => {
                   setShowTrackerScreen(false)
                   setEntryNoteError('')
                 }}
               >
-                Close
+                <IconClose />
               </button>
             </div>
 
